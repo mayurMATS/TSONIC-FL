@@ -24,10 +24,10 @@ export function HeroSection() {
   };
 
   return (
-    <section className="w-full py-6 sm:py-12 md:py-20 lg:py-24 bg-gradient-to-br from-slate-800 via-slate-900 to-zinc-900 sm:bg-gradient-to-b sm:from-blue-50 sm:to-white">
+    <section className="w-full py-4 sm:py-12 md:py-20 lg:py-24 bg-gradient-to-br from-slate-800 via-slate-900 to-zinc-900 sm:bg-gradient-to-b sm:from-blue-50 sm:to-white flex items-center">
       <div className="container px-3 sm:px-4 md:px-6">
-        <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
-          <div className="flex flex-col justify-center space-y-3 sm:space-y-4 mt-16 sm:mt-0 text-center lg:text-left">
+        <div className="grid gap-2 sm:gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
+          <div className="flex flex-col justify-center space-y-2 sm:space-y-3 mt-0 sm:mt-16 text-center lg:text-left">
             <div className="space-y-2">
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tighter mx-auto lg:mx-0 max-w-[300px] sm:max-w-[400px] md:max-w-[600px] text-white sm:text-gray-900">
                 <span className="block sm:hidden">TSonic v1.0 BT</span>
@@ -41,20 +41,6 @@ export function HeroSection() {
               </p>
             </div>
             <div className="flex flex-col min-[400px]:flex-row gap-2 justify-center lg:justify-start">
-              <Button 
-                size="lg" 
-                onClick={() => setIsShopFormOpen(true)}
-                className={cn(
-                  "text-sm sm:text-base py-4 px-6 w-full min-[400px]:w-auto relative overflow-hidden transition-all duration-500",
-                  "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800",
-                  "shadow-lg hover:shadow-xl",
-                  "transform hover:scale-105",
-                  isVisible && "animate-fade-up [--animation-delay:200ms]"
-                )}
-              >
-                <span className="relative z-10">Shop Now</span>
-                <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-              </Button>
               <Button 
                 size="lg" 
                 variant="outline" 
@@ -71,10 +57,24 @@ export function HeroSection() {
                 <span className="relative z-10">WhatsApp Us</span>
                 <div className="absolute inset-0 bg-green-500 opacity-10 animate-pulse"></div>
               </Button>
+              <Button 
+                size="lg" 
+                onClick={() => setIsShopFormOpen(true)}
+                className={cn(
+                  "text-sm sm:text-base py-4 px-6 w-full min-[400px]:w-auto relative overflow-hidden transition-all duration-500",
+                  "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800",
+                  "shadow-lg hover:shadow-xl",
+                  "transform hover:scale-105",
+                  isVisible && "animate-fade-up [--animation-delay:200ms]"
+                )}
+              >
+                <span className="relative z-10">Shop Now</span>
+                <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
+              </Button>
             </div>
           </div>
           <div className={cn(
-            "mx-auto w-full max-w-[300px] sm:max-w-none sm:w-10/12 lg:w-full overflow-hidden rounded-xl bg-muted order-first lg:order-last",
+            "mx-auto w-full max-w-[300px] sm:max-w-none sm:w-10/12 lg:w-full overflow-hidden rounded-xl bg-muted order-first lg:order-last mt-0 mb-2 sm:mb-0 sm:mt-0",
             isVisible && "animate-fade-down [--animation-delay:600ms]"
           )}>
             <div className="relative" style={{ paddingBottom: '159.4%' }}>
