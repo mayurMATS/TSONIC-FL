@@ -7,6 +7,10 @@ import { toast } from "sonner";
 import { ShoppingCart, Plus, Minus, CreditCard, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
+import { createOrUpdateUser, createOrder, initializeRazorpay } from "@/services/api";
+import { CartItem as ApiCartItem } from "@/types/api";
+import RazorpayScript from "./RazorpayScript";
+import { usePayment } from "./PaymentProvider";
 
 interface Product {
   id: number;
@@ -51,6 +55,10 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
     email: "",
     phone: "",
     address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    country: "India",
     notes: ""
   });
 
@@ -58,9 +66,14 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [step, setStep] = useState<'products' | 'cart' | 'checkout'>('products');
   const [cartHighlight, setCartHighlight] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [paymentInProgress, setPaymentInProgress] = useState(false);
   
   // Ref for the View Cart button
   const viewCartButtonRef = useRef<HTMLButtonElement>(null);
+
+  const { initiatePayment, isPaymentActive, resetPaymentState } = usePayment();
 
   const addToCart = (product: Product) => {
     setCart(prevCart => {
@@ -74,7 +87,6 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
       }
       return [...prevCart, { ...product, quantity: 1 }];
     });
-    // toast.success(`${product.name} added to cart`);
     
     // Scroll to View Cart button for mobile users
     if (viewCartButtonRef.current) {
@@ -84,7 +96,6 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
 
   const removeFromCart = (productId: number) => {
     setCart(prevCart => prevCart.filter(item => item.id !== productId));
-    // toast.success("Item removed from cart");
   };
 
   const updateQuantity = (productId: number, newQuantity: number) => {
@@ -108,10 +119,24 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  // Create a wrapped onClose function that prevents closing during payment
+  const handleDialogClose = () => {
+    if (isProcessing || isPaymentActive) {
+      // Prevent closing if a payment is being processed
+      toast.info("Please wait until payment processing is complete");
+      return;
+    }
+    
+    // Ensure payment state is reset when dialog is closed
+    resetPaymentState();
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.email || !formData.phone || !formData.address) {
+    if (!formData.name || !formData.email || !formData.phone || !formData.address || 
+        !formData.city || !formData.state || !formData.pincode) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -121,31 +146,88 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
       return;
     }
 
-    // Here you would typically integrate with a payment gateway
-    // For example, using Stripe:
+    setIsProcessing(true);
+    const toastId = toast.loading("Processing your order...");
+    
     try {
-      // Simulate payment processing
-      toast.loading("Processing payment...");
+      // 1. Create or update user
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        mobile: formData.phone,
+        address: {
+          street: formData.address,
+          city: formData.city,
+          state: formData.state,
+          pincode: formData.pincode,
+          country: formData.country,
+        },
+      };
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const user = await createOrUpdateUser(userData);
       
-      // Simulate successful payment
-      toast.success("Payment successful! Order placed.");
+      // 2. Convert cart items to API format
+      const cartItems: ApiCartItem[] = cart.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        color: item.color,
+        category: item.category,
+      }));
       
-      // Reset form and cart
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        address: "",
-        notes: ""
-      });
-      setCart([]);
-      setStep('products');
-      onClose();
-    } catch (error) {
-      toast.error("Payment failed. Please try again.");
+      // 3. Create order
+      const totalAmount = calculateTotal();
+      const orderData = await createOrder(user.uid, totalAmount, cartItems);
+      
+      // 4. Initialize payment with prefilled data
+      const prefillData = {
+        name: formData.name,
+        email: formData.email,
+        contact: formData.phone,
+      };
+      
+      // Close the loading toast
+      toast.dismiss(toastId);
+      
+      // 5. Use the PaymentProvider to handle payment
+      try {
+        const result = await initiatePayment(orderData, prefillData);
+        
+        // 6. Handle successful payment
+        toast.success("Payment successful! Your order has been placed.");
+        
+        // Reset form and cart
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          address: "",
+          city: "",
+          state: "",
+          pincode: "",
+          country: "India",
+          notes: ""
+        });
+        setCart([]);
+        setStep('products');
+        
+        // Explicit payment state reset before closing
+        resetPaymentState();
+        onClose();
+      } catch (paymentError: any) {
+        console.error("Payment error:", paymentError);
+        // Payment error is already handled by the Provider
+        resetPaymentState();
+      }
+      
+    } catch (error: any) {
+      console.error("Order setup error:", error);
+      toast.dismiss(toastId);
+      toast.error(error.message || "Payment setup failed. Please try again.");
+      resetPaymentState();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -171,6 +253,17 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
       return () => clearTimeout(timer);
     }
   }, [cart]);
+
+  // Function to handle when Razorpay script is loaded
+  const handleRazorpayLoad = () => {
+    setRazorpayLoaded(true);
+  };
+
+  // Function to handle Razorpay script loading error
+  const handleRazorpayError = (error: Error) => {
+    console.error("Razorpay script loading error:", error);
+    toast.error("Payment service unavailable. Please try again later.");
+  };
 
   const renderProducts = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -450,17 +543,64 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
         
         <div>
           <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-            Shipping Address *
+            Street Address *
           </label>
           <Textarea
             id="address"
             name="address"
             value={formData.address}
             onChange={handleChange}
-            placeholder="Enter your full shipping address"
+            placeholder="Enter your street address"
             required
-            className="min-h-[100px] rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            className="min-h-[80px] rounded-lg focus:ring-blue-500 focus:border-blue-500"
           />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+              City *
+            </label>
+            <Input
+              id="city"
+              name="city"
+              value={formData.city}
+              onChange={handleChange}
+              placeholder="Mumbai"
+              required
+              className="rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-2">
+              State *
+            </label>
+            <Input
+              id="state"
+              name="state"
+              value={formData.state}
+              onChange={handleChange}
+              placeholder="Maharashtra"
+              required
+              className="rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="pincode" className="block text-sm font-medium text-gray-700 mb-2">
+              Pincode *
+            </label>
+            <Input
+              id="pincode"
+              name="pincode"
+              value={formData.pincode}
+              onChange={handleChange}
+              placeholder="400001"
+              required
+              className="rounded-lg focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
         </div>
         
         <div>
@@ -495,8 +635,16 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
     </form>
   );
 
+  useEffect(() => {
+    return () => {
+      // Cleanup payment state when component unmounts
+      resetPaymentState();
+    };
+  }, [resetPaymentState]);
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogClose} modal={true}>
+      <RazorpayScript onLoad={handleRazorpayLoad} onError={handleRazorpayError} />
       <DialogContent className="sm:max-w-[800px] p-0 w-[95vw] max-h-[90vh] flex flex-col rounded-xl overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-4 bg-blue-900 text-white">
           <DialogTitle className="text-xl sm:text-2xl font-bold text-center text-white">
@@ -556,6 +704,7 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
               <Button
                 onClick={() => setStep('checkout')}
                 className="w-full py-6 rounded-full bg-blue-800 hover:bg-blue-900 text-base"
+                disabled={cart.length === 0}
               >
                 Proceed to Checkout
               </Button>
@@ -568,6 +717,7 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
                 variant="outline"
                 onClick={() => setStep('cart')}
                 className="w-full py-6 rounded-full text-base border-blue-300 text-blue-700"
+                disabled={isProcessing}
               >
                 Back to Cart
               </Button>
@@ -575,9 +725,10 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
                 type="submit"
                 onClick={handleSubmit}
                 className="w-full py-6 rounded-full bg-blue-800 hover:bg-blue-900 text-base"
+                disabled={isProcessing}
               >
                 <CreditCard className="mr-2 h-5 w-5" />
-                Pay Now
+                {isProcessing ? "Processing..." : "Pay Now"}
               </Button>
             </>
           )}
@@ -588,6 +739,7 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
               variant="ghost"
               onClick={onClose}
               className="w-full text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+              disabled={isProcessing}
             >
               Cancel
             </Button>
