@@ -48,13 +48,16 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           position: fixed !important;
         }
         
-        /* Block other UI when Razorpay is active */
-        body.payment-in-progress {
-          pointer-events: none;
-        }
-        
-        /* But allow Razorpay iframe to receive events */
-        body.payment-in-progress iframe[src*="razorpay"] {
+        /* Allow all Razorpay elements to receive events */
+        /* Instead of disabling events on body, we'll just ensure Razorpay elements have higher z-index */
+        .razorpay-container,
+        .razorpay-checkout-frame,
+        .razorpay-payment-button,
+        .razorpay-backdrop,
+        iframe[src*="razorpay"],
+        iframe[src*="api.razorpay.com"],
+        iframe[src*="checkout.razorpay.com"],
+        div[class*="razorpay"] {
           pointer-events: auto !important;
         }
       `;
@@ -65,7 +68,7 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const observer = new MutationObserver(() => {
       const razorpayFrame = document.querySelector('iframe[src*="razorpay"]');
       if (razorpayFrame) {
-        document.body.classList.add('payment-in-progress');
+        document.body.classList.add('razorpay-payment-active');
         setIsPaymentActive(true);
       } else {
         resetPaymentState();
@@ -100,7 +103,6 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
       
       setIsPaymentActive(true);
-      document.body.classList.add('payment-in-progress');
       
       const result = await initializeRazorpay(paymentOptions);
       return result;

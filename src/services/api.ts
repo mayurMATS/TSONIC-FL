@@ -98,13 +98,21 @@ export function initializeRazorpay(orderData: Order): Promise<any> {
     // Add CSS to increase z-index of Razorpay modal
     const style = document.createElement('style');
     style.innerHTML = `
-      .razorpay-payment-button, .razorpay-checkout-frame, .razorpay-backdrop {
-        z-index: 10000 !important;
+      .razorpay-payment-button, 
+      .razorpay-checkout-frame, 
+      .razorpay-backdrop,
+      iframe[src*="razorpay"],
+      iframe[src*="api.razorpay.com"],
+      iframe[src*="checkout.razorpay.com"],
+      div[class*="razorpay"] {
+        z-index: 2147483647 !important; /* Maximum z-index value */
+        pointer-events: auto !important;
       }
       .razorpay-checkout-frame {
         opacity: 1 !important;
         visibility: visible !important;
         position: fixed !important;
+        pointer-events: auto !important;
       }
     `;
     document.head.appendChild(style);
@@ -146,6 +154,14 @@ export function initializeRazorpay(orderData: Order): Promise<any> {
         },
       },
     };
+    
+    // Merge any additional prefill data from orderData
+    if (orderData.prefill) {
+      options.prefill = {
+        ...options.prefill,
+        ...orderData.prefill
+      };
+    }
     
     // Initialize Razorpay in a slight delay to ensure correct rendering
     setTimeout(() => {
