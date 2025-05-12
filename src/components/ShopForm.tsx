@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { ShoppingCart, Plus, Minus, CreditCard, X } from "lucide-react";
+import { ShoppingCart, Plus, Minus, CreditCard, X, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { createOrUpdateUser, createOrder, initializeRazorpay } from "@/services/api";
@@ -17,8 +17,10 @@ interface Product {
   name: string;
   category: string;
   price: number;
+  originalPrice?: number;  // Optional original price for discounted items
   image: string;
   color: string;
+  discount?: number;  // Optional discount percentage
 }
 
 const products: Product[] = [
@@ -27,6 +29,8 @@ const products: Product[] = [
     name: "v1.0 BT Glass",
     category: "Over-Ear",
     price: 4290,
+    originalPrice: 5790,
+    discount: 26,
     image: "https://res.cloudinary.com/dynwaflwt/image/upload/v1744442887/p1_gpual1.png",
     color: "Matte Black"
   },
@@ -270,6 +274,7 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
       {products.map(product => {
         const quantity = getItemQuantity(product.id);
         const isInCart = quantity > 0;
+        const hasDiscount = product.originalPrice && product.price < product.originalPrice;
         
         return (
           <div 
@@ -301,6 +306,13 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
                   </div>
                 </div>
               )}
+              
+              {hasDiscount && (
+                <div className="absolute top-3 left-3 bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-lg flex items-center">
+                  <Tag className="h-3 w-3 mr-1" />
+                  Save {product.discount}%
+                </div>
+              )}
             </div>
             
             <div className="p-5" onClick={(e) => e.stopPropagation()}>
@@ -310,7 +322,32 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
                 <span className="mx-2 text-gray-300">•</span>
                 <span className="text-sm text-gray-500">{product.color}</span>
               </div>
-              <p className="font-bold text-lg text-blue-800 mb-4">₹{product.price.toLocaleString()}</p>
+              
+              <div className="flex items-center gap-2 mb-4 relative">
+                {product.id === 1 ? (
+                  <motion.span 
+                    className="font-bold text-xl text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md relative"
+                    initial={{ backgroundColor: "rgba(254, 243, 199, 0.5)" }} // amber-50 with opacity
+                    animate={{ 
+                      backgroundColor: ["rgba(254, 243, 199, 0.5)", "rgba(251, 191, 36, 0.2)", "rgba(254, 243, 199, 0.5)"],
+                      scale: [1, 1.03, 1],
+                      textShadow: ["0px 0px 0px rgba(0,0,0,0)", "0px 0px 2px rgba(217, 119, 6, 0.4)", "0px 0px 0px rgba(0,0,0,0)"]
+                    }}
+                    transition={{
+                      duration: 3,
+                      repeat: Infinity,
+                      repeatType: "reverse"
+                    }}
+                  >
+                    ₹{product.price.toLocaleString()}
+                  </motion.span>
+                ) : (
+                  <span className="font-bold text-lg text-blue-800">₹{product.price.toLocaleString()}</span>
+                )}
+                {hasDiscount && (
+                  <span className="text-gray-400 line-through text-sm">₹{product.originalPrice!.toLocaleString()}</span>
+                )}
+              </div>
               
               <div className="h-[44px]">
                 <AnimatePresence mode="wait">
@@ -435,7 +472,19 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
             <div>
               <h4 className="font-medium text-gray-900">{item.name}</h4>
               <p className="text-sm text-gray-500">{item.color}</p>
-              <p className="font-semibold text-blue-800 mt-1">₹{item.price.toLocaleString()}</p>
+              <div className="flex items-center gap-2 mt-1">
+                {item.id === 1 ? (
+                  <p className="font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">₹{item.price.toLocaleString()}</p>
+                ) : (
+                  <p className="font-semibold text-blue-800">₹{item.price.toLocaleString()}</p>
+                )}
+                {item.originalPrice && (
+                  <p className="text-xs text-gray-400 line-through">₹{item.originalPrice.toLocaleString()}</p>
+                )}
+                {item.discount && (
+                  <span className="text-xs bg-amber-100 text-amber-800 px-1 py-0.5 rounded">-{item.discount}%</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -482,7 +531,11 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
           </div>
           <div className="flex justify-between items-center pt-3 border-t mt-3">
             <span className="font-semibold text-lg">Total</span>
-            <span className="font-bold text-lg text-blue-800">₹{calculateTotal().toLocaleString()}</span>
+            {cart.some(item => item.id === 1) ? (
+              <span className="font-bold text-lg text-amber-600 bg-amber-50 px-2 py-0.5 rounded">₹{calculateTotal().toLocaleString()}</span>
+            ) : (
+              <span className="font-bold text-lg text-blue-800">₹{calculateTotal().toLocaleString()}</span>
+            )}
           </div>
         </div>
       )}
@@ -629,7 +682,11 @@ export function ShopForm({ isOpen, onClose }: ShopFormProps) {
         </div>
         <div className="flex justify-between items-center pt-3 border-t mt-3 mb-6">
           <span className="font-semibold text-lg">Total</span>
-          <span className="font-bold text-lg text-blue-800">₹{calculateTotal().toLocaleString()}</span>
+          {cart.some(item => item.id === 1) ? (
+            <span className="font-bold text-lg text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">₹{calculateTotal().toLocaleString()}</span>
+          ) : (
+            <span className="font-bold text-lg text-blue-800">₹{calculateTotal().toLocaleString()}</span>
+          )}
         </div>
       </div>
     </form>
